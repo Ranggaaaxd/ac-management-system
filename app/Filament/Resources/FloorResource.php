@@ -19,6 +19,8 @@ class FloorResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
 
+    protected static ?int $navigationSort = 2;
+
     protected static ?string $modelLabel = 'Lantai';
 
     protected static ?string $pluralModelLabel = 'Lantai';

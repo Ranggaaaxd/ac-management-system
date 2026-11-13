@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Building;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Pages\Dashboard as BaseDashboard;
@@ -16,11 +15,6 @@ class Dashboard extends BaseDashboard
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('building_id')
-                    ->label('Gedung')
-                    ->options(fn (): array => Building::query()->orderBy('name')->pluck('name', 'id')->all())
-                    ->placeholder('Semua Gedung')
-                    ->searchable(),
                 Forms\Components\DatePicker::make('start_date')
                     ->label('Dari tanggal')
                     ->default(now()->startOfMonth()->toDateString()),
@@ -28,7 +22,7 @@ class Dashboard extends BaseDashboard
                     ->label('Sampai tanggal')
                     ->default(now()->endOfMonth()->toDateString()),
             ])
-            ->columns(3)
+            ->columns(2)
             ->statePath('filters')
             ->live();
     }

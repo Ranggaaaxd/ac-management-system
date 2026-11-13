@@ -32,18 +32,9 @@ class AcOverviewStatsWidget extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        $buildingId = $this->filters['building_id'] ?? null;
-        $airConditioners = AirConditioner::query()
-            ->when($buildingId, fn (Builder $query): Builder => $query->whereHas(
-                'room.floor',
-                fn (Builder $query): Builder => $query->where('building_id', $buildingId),
-            ));
+        $airConditioners = AirConditioner::query();
 
         $maintenanceRecords = MaintenanceRecord::query()
-            ->when($buildingId, fn (Builder $query): Builder => $query->whereHas(
-                'airConditioner.room.floor',
-                fn (Builder $query): Builder => $query->where('building_id', $buildingId),
-            ))
             ->when(
                 $this->filters['start_date'] ?? null,
                 fn (Builder $query, string $date): Builder => $query->whereDate('performed_at', '>=', $date),
@@ -87,7 +78,7 @@ class AcOverviewStatsWidget extends StatsOverviewWidget
             Stat::make('AC Rusak', $damagedCount)
                 ->description('Unit yang memerlukan tindak lanjut')
                 ->icon('heroicon-m-exclamation-triangle')
-                ->color('danger')
+                ->color($damagedCount > 0 ? 'danger' : 'success')
                 ->url(AirConditionerResource::getUrl('index', [
                     'tableFilters' => [
                         'condition' => ['values' => ['rusak_ringan', 'rusak_berat', 'perlu_servis']],

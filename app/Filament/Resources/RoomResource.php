@@ -19,6 +19,8 @@ class RoomResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-group';
 
+    protected static ?int $navigationSort = 3;
+
     protected static ?string $modelLabel = 'Ruangan';
 
     protected static ?string $pluralModelLabel = 'Ruangan';

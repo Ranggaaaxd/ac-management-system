@@ -18,6 +18,8 @@ class TechnicianResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-wrench-screwdriver';
 
+    protected static ?int $navigationSort = 4;
+
     protected static ?string $modelLabel = 'Teknisi';
 
     protected static ?string $pluralModelLabel = 'Teknisi';

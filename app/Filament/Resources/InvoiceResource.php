@@ -18,6 +18,7 @@ use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
@@ -30,6 +31,8 @@ class InvoiceResource extends Resource
     protected static ?string $navigationGroup = 'Keuangan';
 
     protected static ?string $navigationIcon = 'heroicon-o-document-currency-dollar';
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $modelLabel = 'Invoice';
 
@@ -194,7 +197,7 @@ class InvoiceResource extends Resource
                     ->query(fn (Builder $query, array $data): Builder => $query
                         ->when($data['from'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('invoice_date', '>=', $date))
                         ->when($data['until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('invoice_date', '<=', $date))),
-            ])
+            ], layout: FiltersLayout::Modal)
             ->headerActions([
                 ExportAction::make()->label('Export Excel'),
             ])

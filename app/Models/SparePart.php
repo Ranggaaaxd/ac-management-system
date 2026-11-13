@@ -23,6 +23,11 @@ class SparePart extends Model
         return $this->hasMany(MaintenanceSparePart::class);
     }
 
+    public function stockIns(): HasMany
+    {
+        return $this->hasMany(SparePartStockIn::class);
+    }
+
     public function maintenanceRecords(): BelongsToMany
     {
         return $this->belongsToMany(MaintenanceRecord::class, 'maintenance_spare_parts')

@@ -16,7 +16,7 @@ class AcNeedsAttentionWidget extends TableWidget
 
     protected static bool $isLazy = false;
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 4;
 
     protected static ?string $heading = 'Unit AC yang Membutuhkan Perhatian';
 
@@ -106,8 +106,6 @@ class AcNeedsAttentionWidget extends TableWidget
                     ->where('status', 'selesai')
                     ->where('type', 'perbaikan'),
             ])
-            ->when($this->filters['building_id'] ?? null, fn (Builder $query, int|string $buildingId): Builder => $query
-                ->whereHas('room.floor', fn (Builder $query): Builder => $query->where('building_id', $buildingId)))
             ->where(function (Builder $query) use ($cutoff): void {
                 $query->whereIn('condition', ['rusak_ringan', 'rusak_berat', 'perlu_servis'])
                     ->orWhereNull('last_serviced_at')

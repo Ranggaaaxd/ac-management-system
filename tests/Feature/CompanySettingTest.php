@@ -57,4 +57,11 @@ class CompanySettingTest extends TestCase
         $this->assertSame(1, CompanySetting::query()->count());
         $this->assertSame('PT Sejuk Sentosa Baru', $setting->fresh()->company_name);
     }
+
+    public function test_company_settings_exposes_one_click_database_backup_action(): void
+    {
+        Livewire::test(ManageCompanySetting::class)
+            ->assertActionExists('backupDatabase')
+            ->assertSee('Backup Database (.sql)');
+    }
 }

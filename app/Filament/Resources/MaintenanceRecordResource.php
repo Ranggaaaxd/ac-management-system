@@ -15,6 +15,7 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use pxlrbt\FilamentExcel\Actions\Tables\ExportAction;
@@ -27,9 +28,13 @@ class MaintenanceRecordResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
 
+    protected static ?string $navigationLabel = 'Riwayat Servis';
+
     protected static ?string $modelLabel = 'Riwayat servis';
 
     protected static ?string $pluralModelLabel = 'Riwayat servis';
+
+    protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form
     {
@@ -116,13 +121,21 @@ class MaintenanceRecordResource extends Resource
                     Forms\Components\FileUpload::make('before_photo')
                         ->label('Foto sebelum')
                         ->image()
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                        ->rules(['image', 'mimes:jpeg,png,webp'])
+                        ->maxSize(2048)
                         ->disk('public')
-                        ->directory('maintenance/before'),
+                        ->directory('maintenance/before')
+                        ->preserveFilenames(false),
                     Forms\Components\FileUpload::make('after_photo')
                         ->label('Foto sesudah')
                         ->image()
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                        ->rules(['image', 'mimes:jpeg,png,webp'])
+                        ->maxSize(2048)
                         ->disk('public')
-                        ->directory('maintenance/after'),
+                        ->directory('maintenance/after')
+                        ->preserveFilenames(false),
                 ])
                 ->columns(2),
             Forms\Components\Section::make('Biaya Jasa')
@@ -187,11 +200,13 @@ class MaintenanceRecordResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
-                'airConditioner.room.floor.building',
-                'technician',
-                'maintenanceSpareParts',
-            ]))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->where('status', 'selesai')
+                ->with([
+                    'airConditioner.room.floor.building',
+                    'technician',
+                    'maintenanceSpareParts',
+                ]))
             ->columns([
                 Tables\Columns\TextColumn::make('performed_at')->label('Tanggal')->date()->sortable(),
                 Tables\Columns\TextColumn::make('airConditioner.asset_code')
@@ -229,9 +244,6 @@ class MaintenanceRecordResource extends Resource
                     ->money('IDR'),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
-                    ->options(['draft' => 'Draft', 'selesai' => 'Selesai']),
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Tipe pengerjaan')
                     ->options(self::typeOptions()),
@@ -249,7 +261,7 @@ class MaintenanceRecordResource extends Resource
                     ->query(fn (Builder $query, array $data): Builder => $query
                         ->when($data['from'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('performed_at', '>=', $date))
                         ->when($data['until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('performed_at', '<=', $date))),
-            ])
+            ], layout: FiltersLayout::Modal)
             ->headerActions([
                 ExportAction::make()->label('Export Excel'),
             ])

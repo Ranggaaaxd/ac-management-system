@@ -19,6 +19,7 @@ use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Actions\Action;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -30,13 +31,17 @@ class AirConditionerResource extends Resource
 {
     protected static ?string $model = AirConditioner::class;
 
-    protected static ?string $navigationGroup = 'Aset AC';
+    protected static ?string $navigationGroup = 'Data AC';
+
+    protected static ?string $navigationLabel = 'Data AC';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    protected static ?string $modelLabel = 'Unit AC';
+    protected static ?string $modelLabel = 'Data AC';
 
-    protected static ?string $pluralModelLabel = 'Aset AC';
+    protected static ?string $pluralModelLabel = 'Data AC';
+
+    protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form
     {
@@ -227,7 +232,7 @@ class AirConditionerResource extends Resource
                     ->label('Kondisi')
                     ->multiple()
                     ->options(self::conditionOptions()),
-            ])
+            ], layout: FiltersLayout::Modal)
             ->headerActions([
                 ExportAction::make()->label('Export Excel'),
                 Action::make('scanQrCamera')
@@ -241,83 +246,88 @@ class AirConditionerResource extends Resource
                     ->modalContent(fn () => view('filament.resources.air-conditioner-resource.qr-scanner')),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Action::make('printQrCode')
-                    ->label('Cetak QR Code')
-                    ->icon('heroicon-o-qr-code')
-                    ->modalHeading(fn (AirConditioner $record): string => "QR Code {$record->asset_code}")
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Tutup')
-                    ->modalContent(function (AirConditioner $record): HtmlString {
-                        $record->loadMissing('room.floor.building');
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make(),
+                    Action::make('printQrCode')
+                        ->label('Cetak QR Code')
+                        ->icon('heroicon-o-qr-code')
+                        ->modalHeading(fn (AirConditioner $record): string => "QR Code {$record->asset_code}")
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Tutup')
+                        ->modalContent(function (AirConditioner $record): HtmlString {
+                            $record->loadMissing('room.floor.building');
 
-                        $qrCodeString = app(AirConditionerQrCode::class)->renderDataUri($record->asset_code);
-                        $printUrl = route('admin.air-conditioners.print-qr', $record);
-                        $buildingName = $record->room?->floor?->building?->name ?? '';
-                        $roomName = $record->room?->name ?? '';
+                            $qrCodeString = app(AirConditionerQrCode::class)->renderDataUri($record->asset_code);
+                            $printUrl = route('admin.air-conditioners.print-qr', $record);
+                            $buildingName = $record->room?->floor?->building?->name ?? '';
+                            $roomName = $record->room?->name ?? '';
 
-                        return new HtmlString(sprintf(
-                            '<div class="text-center p-4">
-                                <img src="%s" alt="QR Code %s" class="mx-auto" style="width: 200px; height: 200px;" />
-                                <div class="mt-4 font-bold text-lg text-gray-800 dark:text-gray-200">%s</div>
-                                <div class="text-sm text-gray-600 dark:text-gray-400">%s - %s PK</div>
-                                <div class="text-sm font-medium text-gray-500">%s - %s</div>
-                                <a href="%s" target="_blank" rel="noopener" class="mt-4 inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white">Cetak stiker</a>
-                            </div>',
-                            e($qrCodeString),
-                            e($record->asset_code),
-                            e($record->asset_code),
-                            e($record->brand),
-                            e($record->capacity_pk),
-                            e($buildingName),
-                            e($roomName),
-                            e($printUrl),
-                        ));
-                    }),
-                Action::make('mutateRoom')
-                    ->label('Mutasi Ruangan')
-                    ->icon('heroicon-o-arrows-right-left')
-                    ->color('warning')
-                    ->modalHeading('Mutasi ruangan AC')
-                    ->form([
-                        Forms\Components\Select::make('to_room_id')
-                            ->label('Ruangan tujuan')
-                            ->options(fn (AirConditioner $record): array => Room::query()
-                                ->with('floor.building')
-                                ->where('id', '!=', $record->room_id)
-                                ->orderBy('name')
-                                ->get()
-                                ->mapWithKeys(fn (Room $room): array => [
-                                    $room->id => "{$room->floor->building->name} - {$room->floor->name} - {$room->name}",
-                                ])
-                                ->all())
-                            ->searchable()
-                            ->required(),
-                        Forms\Components\DatePicker::make('mutation_date')
-                            ->label('Tanggal mutasi')
-                            ->default(now())
-                            ->required(),
-                        Forms\Components\Textarea::make('reason')->label('Alasan'),
-                        Forms\Components\TextInput::make('transferred_by')
-                            ->label('Dipindahkan oleh')
-                            ->default(fn (): ?string => auth()->user()?->name)
-                            ->maxLength(255),
-                    ])
-                    ->action(function (AirConditioner $record, array $data): void {
-                        DB::transaction(function () use ($record, $data): void {
-                            $record->assetMutations()->create([
-                                'from_room_id' => $record->room_id,
-                                'to_room_id' => $data['to_room_id'],
-                                'mutation_date' => $data['mutation_date'],
-                                'reason' => $data['reason'] ?? null,
-                                'transferred_by' => $data['transferred_by'] ?? null,
-                            ]);
+                            return new HtmlString(sprintf(
+                                '<div class="text-center p-4">
+                                    <img src="%s" alt="QR Code %s" class="mx-auto" style="width: 200px; height: 200px;" />
+                                    <div class="mt-4 font-bold text-lg text-gray-800 dark:text-gray-200">%s</div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">%s - %s PK</div>
+                                    <div class="text-sm font-medium text-gray-500">%s - %s</div>
+                                    <a href="%s" target="_blank" rel="noopener" class="mt-4 inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white">Cetak stiker</a>
+                                </div>',
+                                e($qrCodeString),
+                                e($record->asset_code),
+                                e($record->asset_code),
+                                e($record->brand),
+                                e($record->capacity_pk),
+                                e($buildingName),
+                                e($roomName),
+                                e($printUrl),
+                            ));
+                        }),
+                    Action::make('mutateRoom')
+                        ->label('Mutasi Ruangan')
+                        ->icon('heroicon-o-arrows-right-left')
+                        ->color('warning')
+                        ->modalHeading('Mutasi ruangan AC')
+                        ->form([
+                            Forms\Components\Select::make('to_room_id')
+                                ->label('Ruangan tujuan')
+                                ->options(fn (AirConditioner $record): array => Room::query()
+                                    ->with('floor.building')
+                                    ->where('id', '!=', $record->room_id)
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->mapWithKeys(fn (Room $room): array => [
+                                        $room->id => "{$room->floor->building->name} - {$room->floor->name} - {$room->name}",
+                                    ])
+                                    ->all())
+                                ->searchable()
+                                ->required(),
+                            Forms\Components\DatePicker::make('mutation_date')
+                                ->label('Tanggal mutasi')
+                                ->default(now())
+                                ->required(),
+                            Forms\Components\Textarea::make('reason')->label('Alasan'),
+                            Forms\Components\TextInput::make('transferred_by')
+                                ->label('Dipindahkan oleh')
+                                ->default(fn (): ?string => auth()->user()?->name)
+                                ->maxLength(255),
+                        ])
+                        ->action(function (AirConditioner $record, array $data): void {
+                            DB::transaction(function () use ($record, $data): void {
+                                $record->assetMutations()->create([
+                                    'from_room_id' => $record->room_id,
+                                    'to_room_id' => $data['to_room_id'],
+                                    'mutation_date' => $data['mutation_date'],
+                                    'reason' => $data['reason'] ?? null,
+                                    'transferred_by' => $data['transferred_by'] ?? null,
+                                ]);
 
-                            $record->update(['room_id' => $data['to_room_id']]);
-                        });
-                    }),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                                $record->update(['room_id' => $data['to_room_id']]);
+                            });
+                        }),
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make(),
+                ])
+                    ->label('Aksi')
+                    ->icon('heroicon-m-ellipsis-vertical')
+                    ->tooltip('Aksi Data AC'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

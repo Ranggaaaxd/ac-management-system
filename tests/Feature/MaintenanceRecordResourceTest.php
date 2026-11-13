@@ -2,16 +2,25 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\ActiveMaintenance;
 use App\Filament\Resources\AirConditionerResource\Pages\ViewAirConditioner;
 use App\Filament\Resources\AirConditionerResource\RelationManagers\MaintenanceRecordsRelationManager;
+use App\Filament\Resources\MaintenanceRecordResource;
 use App\Filament\Resources\MaintenanceRecordResource\Pages\CreateMaintenanceRecord;
 use App\Filament\Resources\MaintenanceRecordResource\Pages\EditMaintenanceRecord;
+use App\Filament\Resources\MaintenanceRecordResource\Pages\ListMaintenanceRecords;
+use App\Filament\Resources\SparePartResource\Pages\ListSpareParts;
+use App\Filament\Resources\SparePartResource\Pages\ViewSparePart;
+use App\Filament\Resources\SparePartResource\RelationManagers\MaintenanceSparePartsRelationManager;
+use App\Filament\Resources\SparePartResource\RelationManagers\SparePartStockInsRelationManager;
+use App\Models\ActivityLog;
 use App\Models\AirConditioner;
 use App\Models\Building;
 use App\Models\Floor;
 use App\Models\MaintenanceRecord;
 use App\Models\Room;
 use App\Models\SparePart;
+use App\Models\SparePartStockIn;
 use App\Models\User;
 use App\Services\MaintenanceInventory;
 use Filament\Facades\Filament;
@@ -66,6 +75,121 @@ class MaintenanceRecordResourceTest extends TestCase
         ])
             ->assertCanSeeTableRecords([$record])
             ->assertSee('100,000');
+    }
+
+    public function test_spare_part_detail_lists_usage_history_and_opens_related_service_details(): void
+    {
+        $airConditioner = $this->createAirConditioner();
+        $sparePart = SparePart::create([
+            'name' => 'Freon R32',
+            'category' => 'freon',
+            'unit' => 'gram',
+            'stock' => 1000,
+            'minimum_stock' => 100,
+        ]);
+        $record = $airConditioner->maintenanceRecords()->create([
+            'type' => 'perbaikan',
+            'performed_at' => '2026-11-13',
+            'status' => 'selesai',
+            'issue_description' => 'Pendinginan kurang maksimal',
+            'action_taken' => 'Tambah freon dan uji tekanan',
+        ]);
+        $record->maintenanceSpareParts()->create([
+            'spare_part_id' => $sparePart->id,
+            'quantity' => 10,
+            'unit_price' => 500,
+            'subtotal' => 5000,
+        ]);
+
+        $this->get("/admin/spare-parts/{$sparePart->id}")
+            ->assertOk()
+            ->assertSee($sparePart->name);
+
+        Livewire::test(MaintenanceSparePartsRelationManager::class, [
+            'ownerRecord' => $sparePart,
+            'pageClass' => ViewSparePart::class,
+        ])
+            ->assertCanSeeTableRecords([$record->maintenanceSpareParts()->firstOrFail()])
+            ->assertSee('10 gram')
+            ->assertSee('Gedung Utama - Lantai 1 - Ruang Server')
+            ->assertSee('Selesai')
+            ->mountTableAction('viewMaintenanceRecord', $record->maintenanceSpareParts()->firstOrFail())
+            ->assertSee('Lihat catatan servis')
+            ->assertSee('Tambah freon dan uji tekanan');
+    }
+
+    public function test_spare_part_stock_in_action_records_receipt_increments_stock_and_logs_activity(): void
+    {
+        $sparePart = SparePart::create([
+            'name' => 'Freon R32',
+            'category' => 'freon',
+            'unit' => 'kg',
+            'stock' => 2,
+            'minimum_stock' => 1,
+        ]);
+
+        Livewire::test(ListSpareParts::class)
+            ->assertTableActionExists('addStock', record: $sparePart)
+            ->callTableAction('addStock', $sparePart, [
+                'quantity' => 2.5,
+                'incoming_date' => '2026-11-13',
+                'supplier' => 'Toko AC Sejahtera',
+                'purchase_price' => 125000,
+                'notes' => 'Nota 123',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $stockIn = SparePartStockIn::query()->sole();
+
+        $this->assertSame(450, (int) round((float) $sparePart->fresh()->stock * 100));
+        $this->assertSame(250, (int) round((float) $stockIn->quantity * 100));
+        $this->assertSame('2026-11-13', $stockIn->incoming_date->toDateString());
+        $this->assertSame('Toko AC Sejahtera', $stockIn->supplier);
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'UPDATE',
+            'subject' => 'Sparepart',
+            'description' => 'Stok Freon R32 ditambah 2,5 kg.',
+        ]);
+
+        Livewire::test(SparePartStockInsRelationManager::class, [
+            'ownerRecord' => $sparePart,
+            'pageClass' => ViewSparePart::class,
+        ])
+            ->assertCanSeeTableRecords([$stockIn])
+            ->assertSee('Toko AC Sejahtera')
+            ->assertSee('Nota 123');
+
+        Livewire::test(ViewSparePart::class, ['record' => $sparePart->getKey()])
+            ->assertActionExists('addStock');
+
+        $this->assertSame(1, ActivityLog::query()->where('subject', 'Sparepart')->count());
+    }
+
+    public function test_service_working_list_and_history_are_separated_by_status(): void
+    {
+        $airConditioner = $this->createAirConditioner();
+        $draft = $airConditioner->maintenanceRecords()->create([
+            'type' => 'pengecekan',
+            'performed_at' => '2026-11-13',
+            'status' => 'draft',
+        ]);
+        $completed = $airConditioner->maintenanceRecords()->create([
+            'type' => 'perbaikan',
+            'performed_at' => '2026-11-12',
+            'status' => 'selesai',
+        ]);
+
+        Livewire::test(ActiveMaintenance::class)
+            ->assertCanSeeTableRecords([$draft])
+            ->assertCanNotSeeTableRecords([$completed])
+            ->assertActionExists('createMaintenance');
+
+        Livewire::test(ListMaintenanceRecords::class)
+            ->assertCanSeeTableRecords([$completed])
+            ->assertCanNotSeeTableRecords([$draft]);
+
+        $this->assertSame('Riwayat Servis', MaintenanceRecordResource::getNavigationLabel());
+        $this->get('/admin/active-maintenance')->assertOk();
     }
 
     public function test_completed_maintenance_consumes_inventory_once_and_updates_service_history(): void

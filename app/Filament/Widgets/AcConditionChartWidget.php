@@ -19,9 +19,7 @@ class AcConditionChartWidget extends ChartWidget
 
     protected static ?string $description = 'Kondisi unit dengan riwayat servis dalam rentang tanggal terpilih.';
 
-    protected static ?string $maxHeight = '280px';
-
-    protected int|string|array $columnSpan = 'full';
+    protected static ?string $maxHeight = '260px';
 
     protected function getType(): string
     {
@@ -34,8 +32,6 @@ class AcConditionChartWidget extends ChartWidget
         $endDate = $this->filters['end_date'] ?? null;
 
         $airConditioners = AirConditioner::query()
-            ->when($this->filters['building_id'] ?? null, fn (Builder $query, int|string $buildingId): Builder => $query
-                ->whereHas('room.floor', fn (Builder $query): Builder => $query->where('building_id', $buildingId)))
             ->when(
                 $startDate || $endDate,
                 fn (Builder $query): Builder => $query->whereHas(
@@ -76,6 +72,10 @@ class AcConditionChartWidget extends ChartWidget
                 'legend' => [
                     'position' => 'bottom',
                 ],
+            ],
+            'scales' => [
+                'x' => ['display' => false],
+                'y' => ['display' => false],
             ],
             'maintainAspectRatio' => false,
         ];

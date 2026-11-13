@@ -18,6 +18,8 @@ class BuildingResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
+    protected static ?int $navigationSort = 1;
+
     protected static ?string $modelLabel = 'Gedung';
 
     protected static ?string $pluralModelLabel = 'Gedung';
