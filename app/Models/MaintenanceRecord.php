@@ -11,11 +11,18 @@ class MaintenanceRecord extends Model
 {
     protected $guarded = [];
 
+    public function getTotalCostAttribute(): float
+    {
+        return round(
+            (float) $this->labor_cost + (float) $this->maintenanceSpareParts->sum('subtotal'),
+            2,
+        );
+    }
+
     protected function casts(): array
     {
         return [
             'labor_cost' => 'decimal:2',
-            'is_warranty_claim' => 'boolean',
             'pressure_psi' => 'decimal:2',
             'current_ampere' => 'decimal:2',
             'blow_temp_celsius' => 'decimal:2',

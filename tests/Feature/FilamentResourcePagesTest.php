@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\AirConditionerResource;
 use App\Filament\Resources\AirConditionerResource\Pages\ListAirConditioners;
+use App\Filament\Resources\InvoiceResource\Pages\ListInvoices;
+use App\Filament\Resources\MaintenanceRecordResource\Pages\ListMaintenanceRecords;
 use App\Models\AirConditioner;
 use App\Models\AssetMutation;
 use App\Models\Building;
@@ -11,6 +14,7 @@ use App\Models\Room;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -50,6 +54,19 @@ class FilamentResourcePagesTest extends TestCase
         }
     }
 
+    public function test_air_conditioners_do_not_have_purchase_price_or_warranty_fields(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->assertFalse(Schema::hasColumn('air_conditioners', 'purchase_price'));
+        $this->assertFalse(Schema::hasColumn('air_conditioners', 'warranty_until'));
+
+        $this->get('/admin/air-conditioners/create')
+            ->assertOk()
+            ->assertDontSee('Harga beli')
+            ->assertDontSee('Garansi sampai');
+    }
+
     public function test_air_conditioner_qr_action_renders_a_printable_sticker(): void
     {
         $this->actingAs(User::factory()->create());
@@ -60,7 +77,47 @@ class FilamentResourcePagesTest extends TestCase
             ->test(ListAirConditioners::class)
             ->mountTableAction('printQrCode', $airConditioner)
             ->assertSee('Cetak stiker')
-            ->assertSee($airConditioner->asset_code);
+            ->assertSee($airConditioner->asset_code)
+            ->assertSeeHtml('<img src="data:image/svg+xml;base64,')
+            ->assertSeeHtml('target="_blank"')
+            ->assertSee(route('admin.air-conditioners.print-qr', $airConditioner));
+
+        $this->get(route('admin.air-conditioners.print-qr', $airConditioner))
+            ->assertOk()
+            ->assertSee('data:image/svg+xml;base64,')
+            ->assertSee('window.print()')
+            ->assertSee($airConditioner->asset_code)
+            ->assertDontSee('fi-sidebar');
+
+        $this->get(route('admin.air-conditioners.scan', ['assetCode' => $airConditioner->asset_code]))
+            ->assertOk()
+            ->assertJsonPath('url', AirConditionerResource::getUrl('view', ['record' => $airConditioner]));
+    }
+
+    public function test_resource_tables_expose_excel_export_and_camera_scan_actions(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test(ListAirConditioners::class)
+            ->assertTableActionExists('export')
+            ->assertTableActionExists('scanQrCamera')
+            ->mountTableAction('scanQrCamera')
+            ->assertSee('air-conditioner-qr-reader')
+            ->assertSee('html5-qrcode');
+
+        Livewire::test(ListAirConditioners::class)
+            ->callTableAction('export')
+            ->assertHasNoTableActionErrors();
+
+        Livewire::test(ListMaintenanceRecords::class)
+            ->assertTableActionExists('export')
+            ->callTableAction('export')
+            ->assertHasNoTableActionErrors();
+
+        Livewire::test(ListInvoices::class)
+            ->assertTableActionExists('export')
+            ->callTableAction('export')
+            ->assertHasNoTableActionErrors();
     }
 
     public function test_room_mutation_updates_the_ac_and_creates_a_history_record(): void

@@ -3,23 +3,28 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\AirConditionerResource\Pages;
+use App\Filament\Resources\AirConditionerResource\RelationManagers\MaintenanceRecordsRelationManager;
 use App\Models\AirConditioner;
 use App\Models\Building;
 use App\Models\Floor;
 use App\Models\Room;
-use chillerlan\QRCode\QRCode;
-use chillerlan\QRCode\QROptions;
+use App\Services\AirConditionerQrCode;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Infolists\Components\Section as InfolistSection;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use pxlrbt\FilamentExcel\Actions\Tables\ExportAction;
 
 class AirConditionerResource extends Resource
 {
@@ -119,12 +124,6 @@ class AirConditionerResource extends Resource
                             ->integer()
                             ->minValue(1900)
                             ->maxValue((int) date('Y') + 1),
-                        Forms\Components\TextInput::make('purchase_price')
-                            ->label('Harga beli')
-                            ->numeric()
-                            ->minValue(0)
-                            ->prefix('Rp'),
-                        Forms\Components\DatePicker::make('warranty_until')->label('Garansi sampai'),
                         Forms\Components\Select::make('condition')
                             ->label('Kondisi')
                             ->options(self::conditionOptions())
@@ -136,6 +135,39 @@ class AirConditionerResource extends Resource
                     ])
                     ->columns(3),
             ]);
+    }
+
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist->schema([
+            InfolistSection::make('Lokasi')
+                ->schema([
+                    TextEntry::make('room.floor.building.name')->label('Gedung'),
+                    TextEntry::make('room.floor.name')->label('Lantai'),
+                    TextEntry::make('room.name')->label('Ruangan'),
+                ])
+                ->columns(3),
+            InfolistSection::make('Spesifikasi AC')
+                ->schema([
+                    TextEntry::make('asset_code')->label('Kode aset'),
+                    TextEntry::make('brand')->label('Merk'),
+                    TextEntry::make('ac_type')->label('Tipe AC'),
+                    TextEntry::make('capacity_pk')->label('Kapasitas')->suffix(' PK'),
+                    TextEntry::make('refrigerant_type')->label('Jenis refrigeran'),
+                    TextEntry::make('production_year')->label('Tahun produksi'),
+                    TextEntry::make('condition')->label('Kondisi')->badge(),
+                    TextEntry::make('last_serviced_at')->label('Servis terakhir')->date()->placeholder('Belum pernah'),
+                    TextEntry::make('notes')->label('Catatan')->columnSpanFull(),
+                ])
+                ->columns(3),
+        ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            MaintenanceRecordsRelationManager::class,
+        ];
     }
 
     public static function table(Table $table): Table
@@ -193,24 +225,54 @@ class AirConditionerResource extends Resource
                         ->all()),
                 Tables\Filters\SelectFilter::make('condition')
                     ->label('Kondisi')
+                    ->multiple()
                     ->options(self::conditionOptions()),
             ])
+            ->headerActions([
+                ExportAction::make()->label('Export Excel'),
+                Action::make('scanQrCamera')
+                    ->label('Scan QR Kamera')
+                    ->icon('heroicon-m-qr-code')
+                    ->color('primary')
+                    ->modalHeading('Scan QR Code Unit AC')
+                    ->modalWidth('2xl')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Tutup')
+                    ->modalContent(fn () => view('filament.resources.air-conditioner-resource.qr-scanner')),
+            ])
             ->actions([
+                Tables\Actions\ViewAction::make(),
                 Action::make('printQrCode')
                     ->label('Cetak QR Code')
                     ->icon('heroicon-o-qr-code')
                     ->modalHeading(fn (AirConditioner $record): string => "QR Code {$record->asset_code}")
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Tutup')
-                    ->modalContent(function (AirConditioner $record) {
-                        $options = new QROptions;
-                        $options->outputType = QRCode::OUTPUT_MARKUP_SVG;
-                        $options->scale = 8;
+                    ->modalContent(function (AirConditioner $record): HtmlString {
+                        $record->loadMissing('room.floor.building');
 
-                        return view('filament.resources.air-conditioner-resource.qr-code', [
-                            'record' => $record,
-                            'svg' => (new QRCode($options))->render($record->asset_code),
-                        ]);
+                        $qrCodeString = app(AirConditionerQrCode::class)->renderDataUri($record->asset_code);
+                        $printUrl = route('admin.air-conditioners.print-qr', $record);
+                        $buildingName = $record->room?->floor?->building?->name ?? '';
+                        $roomName = $record->room?->name ?? '';
+
+                        return new HtmlString(sprintf(
+                            '<div class="text-center p-4">
+                                <img src="%s" alt="QR Code %s" class="mx-auto" style="width: 200px; height: 200px;" />
+                                <div class="mt-4 font-bold text-lg text-gray-800 dark:text-gray-200">%s</div>
+                                <div class="text-sm text-gray-600 dark:text-gray-400">%s - %s PK</div>
+                                <div class="text-sm font-medium text-gray-500">%s - %s</div>
+                                <a href="%s" target="_blank" rel="noopener" class="mt-4 inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white">Cetak stiker</a>
+                            </div>',
+                            e($qrCodeString),
+                            e($record->asset_code),
+                            e($record->asset_code),
+                            e($record->brand),
+                            e($record->capacity_pk),
+                            e($buildingName),
+                            e($roomName),
+                            e($printUrl),
+                        ));
                     }),
                 Action::make('mutateRoom')
                     ->label('Mutasi Ruangan')
@@ -269,6 +331,7 @@ class AirConditionerResource extends Resource
         return [
             'index' => Pages\ListAirConditioners::route('/'),
             'create' => Pages\CreateAirConditioner::route('/create'),
+            'view' => Pages\ViewAirConditioner::route('/{record}'),
             'edit' => Pages\EditAirConditioner::route('/{record}/edit'),
         ];
     }

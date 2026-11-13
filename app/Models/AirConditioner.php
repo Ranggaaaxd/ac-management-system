@@ -14,8 +14,6 @@ class AirConditioner extends Model
     {
         return [
             'production_year' => 'integer',
-            'purchase_price' => 'decimal:2',
-            'warranty_until' => 'date',
             'last_serviced_at' => 'date',
         ];
     }
